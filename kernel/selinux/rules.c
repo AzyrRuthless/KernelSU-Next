@@ -139,6 +139,26 @@ void ksu_apply_kernelsu_rules()
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
 	ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
 
+	// Custom rule: allow vendor_init proc_sched:file w_file_perms;
+	// (Granting all file permissions for simplicity using ALL)
+	ksu_allow(db, "vendor_init", "proc_sched", "file", ALL);
+
+	// Custom rule: allow hal_power_default { proc proc_sched }:{ file lnk_file } rw_file_perms;
+	// (Granting all file/lnk_file permissions for simplicity using ALL)
+	ksu_allow(db, "hal_power_default", "proc", "file", ALL);
+	ksu_allow(db, "hal_power_default", "proc", "lnk_file", ALL);
+	ksu_allow(db, "hal_power_default", "proc_sched", "file", ALL);
+	ksu_allow(db, "hal_power_default", "proc_sched", "lnk_file", ALL);
+
+	// Custom rules for Graphics Allocator HAL
+	// allow servicemanager hal_graphics_allocator_default:service_manager { find add };
+	ksu_allow(db, "servicemanager", "hal_graphics_allocator_default", "service_manager", "find");
+	ksu_allow(db, "servicemanager", "hal_graphics_allocator_default", "service_manager", "add");
+
+	// allow { appdomain system_server } hal_graphics_allocator_service:service_manager find;
+	ksu_allow(db, "appdomain", "hal_graphics_allocator_service", "service_manager", "find");
+	ksu_allow(db, "system_server", "hal_graphics_allocator_service", "service_manager", "find");
+
 #ifdef CONFIG_KSU_SUSFS
 	// Allow umount in zygote process without installing zygisk
 	ksu_allow(db, "zygote", "labeledfs", "filesystem", "unmount");
