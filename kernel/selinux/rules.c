@@ -133,6 +133,17 @@ void ksu_apply_kernelsu_rules()
     // Allow system server kill su process
     ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
     ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
+    
+    // Custom rule: allow vendor_init proc_sched:file w_file_perms;
+    // (Granting all file permissions for simplicity using ALL)
+    ksu_allow(db, "vendor_init", "proc_sched", "file", ALL); 
+
+    // Custom rule: allow hal_power_default { proc proc_sched }:{ file lnk_file } rw_file_perms;
+    // (Granting all file/lnk_file permissions for simplicity using ALL)
+    ksu_allow(db, "hal_power_default", "proc", "file", ALL);     
+    ksu_allow(db, "hal_power_default", "proc", "lnk_file", ALL); 
+    ksu_allow(db, "hal_power_default", "proc_sched", "file", ALL);     
+    ksu_allow(db, "hal_power_default", "proc_sched", "lnk_file", ALL);
 
 #ifdef CONFIG_KSU_SUSFS
 	// Allow umount in zygote process without installing zygisk
