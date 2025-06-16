@@ -317,7 +317,7 @@ module_param_cb(ksu_debug_manager_uid, &expected_size_ops,
 
 #endif
 
-bool is_manager_apk(char *path)
+bool ksu_is_manager_apk(char *path)
 {
 	// set debug info to print size and hash to kernel log
 	pr_info("%s: expected size: %u, expected hash: %s\n",
