@@ -26,6 +26,33 @@
 #include "syscall_hook_manager.h"
 #include "kernel_umount.h"
 
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif // #ifdef CONFIG_KSU_SUSFS
+
+static bool ksu_enhanced_security_enabled = false;
+
+static int enhanced_security_feature_get(u64 *value)
+{
+	*value = ksu_enhanced_security_enabled ? 1 : 0;
+	return 0;
+}
+
+static int enhanced_security_feature_set(u64 value)
+{
+	bool enable = value != 0;
+	ksu_enhanced_security_enabled = enable;
+	pr_info("enhanced_security: set to %d\n", enable);
+	return 0;
+}
+
+static const struct ksu_feature_handler enhanced_security_handler = {
+	.feature_id = KSU_FEATURE_ENHANCED_SECURITY,
+	.name = "enhanced_security",
+	.get_handler = enhanced_security_feature_get,
+	.set_handler = enhanced_security_feature_set,
+};
+
 // force_sig kcompat, TODO: move it out of core_hook.c
 // https://elixir.bootlin.com/linux/v5.3-rc1/source/kernel/signal.c#L1613
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
@@ -35,6 +62,31 @@
 #endif
 
 extern void disable_seccomp(struct task_struct *tsk);
+
+#ifdef CONFIG_KSU_SUSFS
+static inline bool is_zygote_isolated_service_uid(uid_t uid)
+{
+	uid %= 100000;
+	return (uid >= 99000 && uid < 100000);
+}
+
+static inline bool is_zygote_normal_app_uid(uid_t uid)
+{
+    uid %= 100000;
+    return (uid >= 10000 && uid < 19999);
+}
+
+extern u32 susfs_zygote_sid;
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+extern void susfs_run_sus_path_loop(uid_t uid);
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+extern void susfs_reorder_mnt_id(void);
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+#ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
+extern void susfs_try_umount(uid_t uid);
+#endif // #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
+#endif // #ifdef CONFIG_KSU_SUSFS
 
 static void ksu_install_manager_fd_tw_func(struct callback_head *cb)
 {
@@ -47,6 +99,18 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
     // we rely on the fact that zygote always call setresuid(3) with same uids
     uid_t new_uid = ruid;
     uid_t old_uid = current_uid().val;
+
+    // We only interest in process spwaned by zygote
+    if (!susfs_is_sid_equal(current_cred(), susfs_zygote_sid)) {
+        return 0;
+    }
+
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+    // Check if spawned process is isolated service first, and force to do umount if so  
+    if (is_zygote_isolated_service_uid(new_uid)) {
+        goto do_umount;
+    }
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 
     pr_info("handle_setresuid from %d to %d\n", old_uid, new_uid);
 
@@ -73,6 +137,11 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
         return 0;
     }
 
+// Check if spawned process is normal user app and needs to be umounted
+    if (likely(is_zygote_normal_app_uid(new_uid) && ksu_uid_should_umount(new_uid))) {
+        goto do_umount;
+    }
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
     if (ksu_is_allow_uid_for_current(new_uid)) {
         if (current->seccomp.mode == SECCOMP_MODE_FILTER &&
@@ -92,7 +161,27 @@ int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid)
 #endif
 
     // Handle kernel umount
+    //ksu_handle_umount(old_uid, new_uid);
+
+    return 0;
+
+do_umount:
+    // Handle kernel umount
+#ifndef CONFIG_KSU_SUSFS_TRY_UMOUNT
     ksu_handle_umount(old_uid, new_uid);
+#else
+    susfs_try_umount(new_uid);
+#endif // #ifndef CONFIG_KSU_SUSFS_TRY_UMOUNT
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+    // We can reorder the mnt_id now after all sus mounts are umounted
+    susfs_reorder_mnt_id();
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+    susfs_run_sus_path_loop(new_uid);
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+
+    susfs_set_current_proc_umounted();
 
     return 0;
 }
