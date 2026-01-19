@@ -917,7 +917,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 	if (magic2 == KSU_INSTALL_MAGIC2) {
 		int fd = ksu_install_fd();
 		// downstream: dereference all arg usage!
-		if (copy_to_user((void __user *)*arg, &fd, sizeof(fd))) {
+		if (copy_to_user((void __user *)*(unsigned long *)arg, &fd, sizeof(fd))) {
 			pr_err("install ksu fd reply err\n");
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 		close_fd(fd);
@@ -929,7 +929,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 	}
 
 	// extensions 
-	u64 reply = (u64)*arg;
+	u64 reply = (u64)*(unsigned long *)arg;
 
 	if (magic2 == CHANGE_MANAGER_UID) {
 		// only root is allowed for this command
@@ -940,7 +940,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 		ksu_set_manager_appid(cmd);
 
 		if (cmd == ksu_get_manager_appid()) {
-			if (copy_to_user((void __user *)*arg, &reply, sizeof(reply)))
+			if (copy_to_user((void __user *)*(unsigned long *)arg, &reply, sizeof(reply)))
 				pr_info("sys_reboot: reply fail\n");
 		}
 
@@ -952,11 +952,11 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 		if (current_uid().val != 0)
 			return 0;
 
-		int ret = send_sulog_dump(*arg);
+		int ret = send_sulog_dump((void __user *)*(unsigned long *)arg);
 		if (ret)
 			return 0;
 
-		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
+		if (copy_to_user((void __user *)*(unsigned long *)arg, &reply, sizeof(reply)))
 			return 0;
 	}
 
@@ -968,7 +968,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 		pr_info("sys_reboot: ksu_change_ksuver to: %d\n", cmd);
 		ksuver_override = cmd;
 
-		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
+		if (copy_to_user((void __user *)*(unsigned long *)arg, &reply, sizeof(reply)))
 			return 0;
 	}
 
@@ -1015,6 +1015,7 @@ static struct kprobe reboot_kp = {
 	.symbol_name = REBOOT_SYMBOL,
 	.pre_handler = reboot_handler_pre,
 };
+#endif
 #endif
 
 void ksu_supercalls_init(void)
