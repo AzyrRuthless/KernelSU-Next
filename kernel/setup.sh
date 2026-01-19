@@ -43,19 +43,22 @@ setup_kernelsu() {
     echo "[+] Setting up $REPO..."
     test -d "$GKI_ROOT/$REPO" || git clone "https://github.com/$OWNER/$REPO" && echo "[+] Repository cloned."
     cd "$GKI_ROOT/$REPO"
+    
+    # Clean up and ensure we have latest metadata
     git stash && echo "[-] Stashed current changes."
+    git fetch origin --tags && echo "[+] Fetched tags and refs."
 
-    BRANCH="$(git rev-parse --abbrev-ref origin/HEAD | sed 's@^origin/@@')"
-    if [ "$(git status | grep -Po 'v\d+(\.\d+)*' | head -n1)" ]; then
-        git checkout $BRANCH && echo "[-] Switched to $BRANCH branch."
-    fi
-
-    git pull && echo "[+] Repository updated."
     if [ -z "${1-}" ]; then
+        # Default to latest tag
         git checkout "$(git describe --abbrev=0 --tags)" && echo "[-] Checked out latest tag."
     else
-        git checkout "$1" && echo "[-] Checked out $1." || echo "[-] Checkout default branch"
+        # Try direct checkout, then try tracking the remote branch
+        # This solves the 'pathspec' error in fresh CI clones.
+        git checkout "$1" 2>/dev/null || \
+        git checkout -b "$1" "origin/$1" 2>/dev/null || \
+        echo "[-] Using default branch (checkout $1 failed)"
     fi
+
     cd "$DRIVER_DIR"
     ln -sf "$(realpath --relative-to="$DRIVER_DIR" "$GKI_ROOT/$REPO/kernel")" "kernelsu" && echo "[+] Symlink created."
 
