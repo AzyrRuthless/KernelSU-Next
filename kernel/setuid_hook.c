@@ -30,29 +30,6 @@
 #include <linux/susfs_def.h>
 #endif // #ifdef CONFIG_KSU_SUSFS
 
-static bool ksu_enhanced_security_enabled = false;
-
-static int enhanced_security_feature_get(u64 *value)
-{
-	*value = ksu_enhanced_security_enabled ? 1 : 0;
-	return 0;
-}
-
-static int enhanced_security_feature_set(u64 value)
-{
-	bool enable = value != 0;
-	ksu_enhanced_security_enabled = enable;
-	pr_info("enhanced_security: set to %d\n", enable);
-	return 0;
-}
-
-static const struct ksu_feature_handler enhanced_security_handler = {
-	.feature_id = KSU_FEATURE_ENHANCED_SECURITY,
-	.name = "enhanced_security",
-	.get_handler = enhanced_security_feature_get,
-	.set_handler = enhanced_security_feature_set,
-};
-
 // force_sig kcompat, TODO: move it out of core_hook.c
 // https://elixir.bootlin.com/linux/v5.3-rc1/source/kernel/signal.c#L1613
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
